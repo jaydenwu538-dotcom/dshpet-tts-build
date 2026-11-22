@@ -45,6 +45,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (unsigned long long)diskTotal;
 + (unsigned long long)diskFree;
 
+/// 本進程自己的常駐記憶體（RSS）。清單第一行用它，別拿系統「已使用」冒充。
++ (unsigned long long)ownResidentMemory;
+
 /// 例如 "iPhone11,6"。
 + (nullable NSString *)machineName;
 + (NSInteger)cpuCount;

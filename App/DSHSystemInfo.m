@@ -128,6 +128,16 @@ static BOOL DSHFetchVM(vm_statistics64_data_t *out) {
     return (unsigned long long)fs.f_bavail * (unsigned long long)fs.f_bsize;
 }
 
+#pragma mark - 自己
+
++ (unsigned long long)ownResidentMemory {
+    struct dsh_proc_taskinfo info;
+    memset(&info, 0, sizeof(info));
+    int got = proc_pidinfo(getpid(), DSH_PROC_PIDTASKINFO, 0, &info, (int)sizeof(info));
+    if (got != (int)sizeof(info)) return 0;
+    return (unsigned long long)info.pti_resident_size;
+}
+
 #pragma mark - 機型
 
 + (nullable NSString *)machineName {

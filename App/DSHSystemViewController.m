@@ -114,7 +114,8 @@ typedef NS_ENUM(NSInteger, DSHSystemSection) {
                @"沒有相應權限時會顯示「不可讀」——這是系統限制，不是這裡出錯。";
     }
     if ((DSHSystemSection)section == DSHSystemSectionMemoryDetail) {
-        return @"「可回收」是 inactive + purgeable，系統吃緊時會自動收走，不算真正洩漏。";
+        return @"「可回收」是 inactive + purgeable，系統吃緊時會自動收走，不算真正洩漏。"
+               @"「總容量」是系統回報的 hw.memsize，標稱 4 GB 的機器實際會少一點（固件與 GPU 佔用）。";
     }
     return nil;
 }
@@ -153,12 +154,11 @@ typedef NS_ENUM(NSInteger, DSHSystemSection) {
             unsigned long long total = self.diskTotal;
             unsigned long long used = total > self.diskFree ? total - self.diskFree : 0;
             double ratio = total > 0 ? (double)used / (double)total : 0.0;
-            cell.textLabel.text = [NSString stringWithFormat:@"已用 %@，剩 %@ / %@（%.0f%%）",
+            cell.textLabel.text = [NSString stringWithFormat:@"%@ / %@（%.0f%%）",
                                    [DSHSystemInfo formatBytes:used],
-                                   [DSHSystemInfo formatBytes:self.diskFree],
                                    [DSHSystemInfo formatBytes:total],
                                    ratio * 100.0];
-            cell.detailTextLabel.text = @"整個 / 分區";
+            cell.detailTextLabel.text = [NSString stringWithFormat:@"已用，剩 %@ 可用", [DSHSystemInfo formatBytes:self.diskFree]];
             [self attachProgressToCell:cell ratio:ratio];
         }
         return cell;
@@ -215,7 +215,7 @@ typedef NS_ENUM(NSInteger, DSHSystemSection) {
     if (indexPath.row == 0) {
         cell.textLabel.text = @"本 App";
         cell.textLabel.textColor = UIColor.systemTealColor;
-        cell.detailTextLabel.text = [DSHSystemInfo formatBytes:self.usedMem];
+        cell.detailTextLabel.text = [DSHSystemInfo formatBytes:[DSHSystemInfo ownResidentMemory]];
         cell.detailTextLabel.textColor = UIColor.systemTealColor;
         return cell;
     }
