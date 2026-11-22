@@ -10,9 +10,11 @@ extern char **environ;
 static NSString *const kDSHPetVoiceFlag = @"/var/jb/Library/DSHPet/voice";
 static NSString *const kDSHPetVoiceFlagAlt = @"/Library/DSHPet/voice";
 
-// 本地 TTS 工具（sherpa-onnx 命令行）与 Piper 小模型。
-// 有它们就用真人一点的合成音，没有就退回系统 AVSpeechSynthesizer。
-static NSString *const kDSHPetTTSModelDir = @"/var/jb/Library/DSHPet/models/piper_low";
+// 本地 TTS 工具（sherpa-onnx 命令行）与 fanchen-C 中文女声模型。
+// 有它们就用自然得多的合成音，没有就退回系统 AVSpeechSynthesizer。
+static NSString *const kDSHPetTTSModelDir = @"/var/jb/Library/DSHPet/models/fanchen";
+// 语速倍率：小于 1 = 更快更尖，贴着「小宠物」的人设。fanchen-C 本身偏慢，给 0.85。
+static NSString *const kDSHPetTTSLengthScale = @"0.85";
 
 static NSString *DSHPetTTSTool(void) {
     NSArray<NSString *> *cands = @[
@@ -100,6 +102,7 @@ static BOOL DSHPetLocalTTSAvailable(void) {
             [dir UTF8String],
             [text UTF8String],
             [wav UTF8String],
+            [kDSHPetTTSLengthScale UTF8String],
             NULL
         };
         posix_spawn_file_actions_t fa;
