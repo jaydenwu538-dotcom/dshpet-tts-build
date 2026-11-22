@@ -92,7 +92,9 @@ int main(int argc, char **argv) {
     SherpaOnnxOfflineTtsConfig config;
     memset(&config, 0, sizeof(config));
     config.model.vits.model = model;
-    config.model.vits.lexicon = lexicon;
+    // medium 这类模型不带 lexicon.txt（改用 espeak-ng），此时必须留空，
+    // 否则 sherpa-onnx 的 Validate 会因为「lexicon 文件不存在」直接失败。
+    config.model.vits.lexicon = (access(lexicon, F_OK) == 0) ? lexicon : NULL;
     config.model.vits.tokens = tokens;
     config.model.vits.data_dir = dict_dir;
     config.model.vits.dict_dir = dict_dir;
