@@ -1,12 +1,16 @@
-name: Build DSHPet dylib
+name: Build DSHPet
 
 on:
   workflow_dispatch:
   push:
     paths:
       - 'DSHPet/**'
+      - 'App/**'
+      - 'Respring/**'
       - 'Tweak.xm'
       - 'Makefile'
+      - 'control'
+      - 'DSHPet.plist'
       - '.github/workflows/build-dylib.yml'
 
 permissions:
@@ -20,8 +24,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install toolchain
-        run: |
-          brew install ldid xz make dpkg || true
+        run: brew install ldid xz make dpkg || true
 
       - name: Setup Theos
         run: |
@@ -36,30 +39,49 @@ jobs:
           tar -xf "$RUNNER_TEMP/sdk.tar.xz" -C "$RUNNER_TEMP/theos/sdks"
           ls "$RUNNER_TEMP/theos/sdks"
 
-      - name: Build tweak
+      # tweak + setuid 助手（dshpet-respring 是同一个 Theos 项目的 tool target）
+      - name: Build tweak and helper
         run: |
           set -e
           export PATH="$THEOS/bin:$PATH"
+          chmod +x layout/DEBIAN/postinst || true
           gmake clean || true
           gmake package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless DEBUG=0
 
-      - name: Collect dylib
+      # 安装器 App 的 Shared/ 是编译时拼出来的，不入库
+      - name: Build installer app
+        run: |
+          set -e
+          export PATH="$THEOS/bin:$PATH"
+          mkdir -p App/Shared
+          cp DSHPet/*.h DSHPet/*.m App/Shared/
+          cd App
+          gmake clean || true
+          gmake package FINALPACKAGE=1 DEBUG=0
+
+      - name: Collect binaries
         run: |
           set -e
           mkdir -p out
           find .theos -name 'DSHPet.dylib' -type f -exec cp {} out/ \;
+          find .theos -name 'dshpet-respring' -type f -exec cp {} out/ \;
+          find App/.theos -name 'DSHPet' -type f -path '*.app/*' -exec cp {} out/DSHPet_app \;
           ls -la out
+          echo "=== dylib ==="
           lipo -info out/DSHPet.dylib
-          ldid -h out/DSHPet.dylib | head -n 10
-          echo "--- load commands ---"
-          otool -l out/DSHPet.dylib | grep -A2 -E 'LC_DYLD_CHAINED_FIXUPS|LC_DYLD_INFO_ONLY' || true
-          echo "--- objc methlist ---"
-          otool -v -s __TEXT __objc_methlist out/DSHPet.dylib | head -n 5 || echo "no __objc_methlist section"
+          otool -l out/DSHPet.dylib | grep -c LC_DYLD_CHAINED_FIXUPS || true
+          otool -v -s __TEXT __objc_methlist out/DSHPet.dylib | head -n 3 || true
+          echo "=== helper ==="
+          lipo -info out/dshpet-respring
+          echo "=== app ==="
+          lipo -info out/DSHPet_app || true
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          gh release delete dshpet-dylib --yes --cleanup-tag || true
-          gh release create dshpet-dylib out/DSHPet.dylib --title "DSHPet dylib" --notes "arm64 + arm64e, built by Xcode clang"
+          gh release delete dshpet-build --yes --cleanup-tag || true
+          gh release create dshpet-build out/DSHPet.dylib out/dshpet-respring out/DSHPet_app \
+            --title "DSHPet build artifacts" \
+            --notes "dylib (arm64+arm64e, chained fixups) / setuid helper / installer app"

@@ -1,0 +1,68 @@
+#!/bin/sh
+# 装完立刻让 SpringBoard 重新加载 DSHPet 并重启，避免「装了没反应」。
+set -e
+
+JB="/var/jb"
+
+find_ldid() {
+    for L in "$JB/usr/bin/ldid" /usr/bin/ldid /usr/bin/ldid2; do
+        if [ -x "$L" ]; then echo "$L"; return 0; fi
+    done
+    return 1
+}
+
+# 给越狱分区里的可执行文件补 ad-hoc 签名并加进 trustcache。
+# 不这么做内核会以 Killed: 9 拒绝执行（真 cdhash != 文件 sha256，必须是 CodeDirectory 的哈希）。
+sign_and_trust() {
+    F="$1"
+    [ -f "$F" ] || return 0
+    chown 0:0 "$F" 2>/dev/null || true
+    chmod 755 "$F" 2>/dev/null || true
+    L="$(find_ldid)" || return 0
+    "$L" -S "$F" >/dev/null 2>&1 || true
+    # ldid -h 对 FAT 会打印两行，取第一行；否则 jbctl 会报 wrong length
+    CD="$("$L" -h "$F" 2>/dev/null | sed -n 's/^CandidateCDHash sha256=//p' | head -n 1)"
+    if [ -n "$CD" ] && [ -x "$JB/basebin/jbctl" ]; then
+        "$JB/basebin/jbctl" trustcache add "$CD" >/dev/null 2>&1 || true
+    fi
+}
+
+# 资源目录放开写权限，方便安装器 App 之后原地更新动画
+if [ -d "$JB/Library/DSHPet" ]; then
+    chmod -R 755 "$JB/Library/DSHPet" 2>/dev/null || true
+    chmod 777 "$JB/Library/DSHPet" 2>/dev/null || true
+    chmod 777 "$JB/Library/DSHPet/mov" 2>/dev/null || true
+fi
+
+# respring 助手需要 setuid 才能真正杀掉 SpringBoard
+if [ -f "$JB/usr/bin/dshpet-respring" ]; then
+    chown 0:0 "$JB/usr/bin/dshpet-respring" 2>/dev/null || true
+    chmod 4755 "$JB/usr/bin/dshpet-respring" 2>/dev/null || true
+    L="$(find_ldid)" && "$L" -S "$JB/usr/bin/dshpet-respring" 2>/dev/null || true
+fi
+
+# 本地推理 / 本地 TTS 的运行时：必须签名 + 进 trustcache，否则 iOS 拒绝执行。
+sign_and_trust "$JB/usr/bin/llama-completion"
+sign_and_trust "$JB/usr/bin/sherpa-tts"
+sign_and_trust "$JB/Library/DSHPet/lib/SherpaOnnxC.framework/SherpaOnnxC"
+
+# 模型档案只读就够了
+if [ -d "$JB/Library/DSHPet/models" ]; then
+    chmod 755 "$JB/Library/DSHPet/models" 2>/dev/null || true
+    chmod 644 "$JB/Library/DSHPet/models"/*.gguf 2>/dev/null || true
+    chmod 644 "$JB/Library/DSHPet/models"/*/*.onnx 2>/dev/null || true
+fi
+
+export PATH="$JB/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+# 重启桌面必须延后并放到后台！
+# 如果在 postinst 里同步 respring，会把安装器（Sileo/Zebra）自己的 dpkg
+# 事务一起打断，留下 "Dpkg 被中斷" 的 half-configured 状态。
+# 这里等 8 秒，让 dpkg 先把事务收尾，再重启 SpringBoard。
+if [ -x "$JB/usr/bin/sbreload" ]; then
+    ( sleep 8; exec "$JB/usr/bin/sbreload" >/dev/null 2>&1 ) >/dev/null 2>&1 &
+elif command -v killall >/dev/null 2>&1; then
+    ( sleep 8; exec killall -9 SpringBoard >/dev/null 2>&1 ) >/dev/null 2>&1 &
+fi
+
+exit 0
