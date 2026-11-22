@@ -22,7 +22,7 @@ jobs:
           xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=15.0 -isysroot "$SDK" \
             -o sherpa-tts main.o "$FRAMEWORK/SherpaOnnxC" \
             -framework CoreFoundation -framework Foundation \
-            -Wl,-headerpad,0x1000 -Wl,-rpath,@loader_path/../Library/DSHPet/lib
+            -Wl,-headerpad,0x1000 -Wl,-rpath,/var/jb/Library/DSHPet/lib
           file sherpa-tts
           otool -l sherpa-tts | grep -A2 LC_BUILD_VERSION | head -5
       - name: Sign
