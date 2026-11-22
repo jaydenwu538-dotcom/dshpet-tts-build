@@ -1,0 +1,38 @@
+name: Build sherpa-tts for iOS
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch sherpa-onnx xcframework
+        run: |
+          curl -fL --retry 3 -o s.zip https://github.com/k2-fsa/sherpa-onnx/releases/download/xcframework/sherpa-onnx-v2.0.3-ios-shared-onnxruntime-static.xcframework.zip
+          unzip -q s.zip
+      - name: Build
+        run: |
+          set -euo pipefail
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          FRAMEWORK=SherpaOnnxC.xcframework/ios-arm64/SherpaOnnxC.framework
+          xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=15.0 -isysroot "$SDK" \
+            -I "$FRAMEWORK/Headers" -O2 -c main.c -o main.o
+          xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=15.0 -isysroot "$SDK" \
+            -o sherpa-tts main.o "$FRAMEWORK/SherpaOnnxC" \
+            -framework CoreFoundation -framework Foundation \
+            -Wl,-headerpad,0x1000 -Wl,-rpath,@loader_path/../Library/DSHPet/lib
+          file sherpa-tts
+          otool -l sherpa-tts | grep -A2 LC_BUILD_VERSION | head -5
+      - name: Sign
+        run: |
+          brew install ldid
+          ldid -S sherpa-tts
+          ldid -h sherpa-tts
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete tts-bin --yes --cleanup-tag || true
+          gh release create tts-bin sherpa-tts --title "sherpa-tts for iOS" --notes "arm64, ad-hoc signed"
