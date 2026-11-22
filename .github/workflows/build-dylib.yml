@@ -1,0 +1,65 @@
+name: Build DSHPet dylib
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'DSHPet/**'
+      - 'Tweak.xm'
+      - 'Makefile'
+      - '.github/workflows/build-dylib.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          brew install ldid xz make dpkg || true
+
+      - name: Setup Theos
+        run: |
+          set -e
+          rm -rf "$RUNNER_TEMP/theos"
+          git clone --recursive --depth 1 https://github.com/theos/theos.git "$RUNNER_TEMP/theos"
+          echo "THEOS=$RUNNER_TEMP/theos" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/theos/bin" >> "$GITHUB_PATH"
+          mkdir -p "$RUNNER_TEMP/theos/sdks"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/sdk.tar.xz" \
+            https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
+          tar -xf "$RUNNER_TEMP/sdk.tar.xz" -C "$RUNNER_TEMP/theos/sdks"
+          ls "$RUNNER_TEMP/theos/sdks"
+
+      - name: Build tweak
+        run: |
+          set -e
+          export PATH="$THEOS/bin:$PATH"
+          gmake clean || true
+          gmake package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless DEBUG=0
+
+      - name: Collect dylib
+        run: |
+          set -e
+          mkdir -p out
+          find .theos -name 'DSHPet.dylib' -type f -exec cp {} out/ \;
+          ls -la out
+          lipo -info out/DSHPet.dylib
+          ldid -h out/DSHPet.dylib | head -n 10
+          echo "--- load commands ---"
+          otool -l out/DSHPet.dylib | grep -A2 -E 'LC_DYLD_CHAINED_FIXUPS|LC_DYLD_INFO_ONLY' || true
+          echo "--- objc methlist ---"
+          otool -v -s __TEXT __objc_methlist out/DSHPet.dylib | head -n 5 || echo "no __objc_methlist section"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          gh release delete dshpet-dylib --yes --cleanup-tag || true
+          gh release create dshpet-dylib out/DSHPet.dylib --title "DSHPet dylib" --notes "arm64 + arm64e, built by Xcode clang"

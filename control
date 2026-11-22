@@ -1,0 +1,8 @@
+Package: com.jayden.dshpet
+Name: DSH Pet
+Version: 1.9.0
+Architecture: iphoneos-arm64
+Description: DSH 桌面宠物 —— 把 PC2005-cloud/dsh-pet 的桌宠本体移植到 iOS SpringBoard（原生 AVPlayerLayer 播放 HEVC-alpha 动画）
+Maintainer: Jayden Wu
+Author: Jayden Wu
+Section: Tweaks
