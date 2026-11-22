@@ -3,6 +3,7 @@
 #import "DSHPetPreviewViewController.h"
 #import "DSHSecurityViewController.h"
 #import "DSHChatViewController.h"
+#import "DSHSystemViewController.h"
 
 // 「操作」区行号：第 0 行是桌宠开关（UISwitch），不参与点击动作
 static const NSInteger kDSHRowToggle = 0;
@@ -97,7 +98,7 @@ static const NSInteger kDSHRowPreview = 3;
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) return self.statusItems.count;
     if (section == 1) return 4;
-    return 4;
+    return 5;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -184,6 +185,11 @@ static const NSInteger kDSHRowPreview = 3;
             cell.imageView.image = [UIImage systemImageNamed:@"shield.lefthalf.filled"];
             cell.imageView.tintColor = [UIColor systemRedColor];
         } else if (indexPath.row == 2) {
+            cell.textLabel.text = @"系統狀態";
+            cell.detailTextLabel.text = @"記憶體、磁碟、各程式占用（唯讀）";
+            cell.imageView.image = [UIImage systemImageNamed:@"memorychip"];
+            cell.imageView.tintColor = [UIColor systemIndigoColor];
+        } else if (indexPath.row == 3) {
             cell.textLabel.text = @"使用說明";
             cell.imageView.image = [UIImage systemImageNamed:@"info.circle"];
             cell.imageView.tintColor = [UIColor secondaryLabelColor];
@@ -227,6 +233,8 @@ static const NSInteger kDSHRowPreview = 3;
         } else if (indexPath.row == 1) {
             [self.navigationController pushViewController:[DSHSecurityViewController new] animated:YES];
         } else if (indexPath.row == 2) {
+            [self.navigationController pushViewController:[DSHSystemViewController new] animated:YES];
+        } else if (indexPath.row == 3) {
             [self showAbout];
         } else {
             [self shareReport];
