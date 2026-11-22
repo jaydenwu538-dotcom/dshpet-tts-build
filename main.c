@@ -1,15 +1,15 @@
-// sherpa-tts —— 用 sherpa-onnx 的 VITS/MeloTTS 中文模型把一句话合成成 wav。
+// sherpa-tts —— 用 sherpa-onnx 的 VITS / Piper 中文模型把一句话合成成 wav。
 //
-// 用法：sherpa-tts <model-dir> <text> <out.wav>
-//   model-dir 里需要有 model.int8.onnx（或 model.onnx）、tokens.txt、lexicon.txt。
-//
-// 为什么先做命令行工具而不是直接接进 App：和 llama 那次一样，先证明
-// 「引擎能在这台机器上跑、多久出一句话、音质能不能听」，再决定怎么塞进产品。
+// 用法：sherpa-tts <model-dir> <text> <out.wav> [length-scale]
+//   model-dir 里需要有 model.int8.onnx（或 model.onnx）、tokens.txt，
+//   可选 lexicon.txt（x_low 类模型）或 espeak-ng-data/（medium 类模型）。
+//   length-scale 可选，小于 1 语速更快、音更高；大于 1 更慢更沉稳。
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "sherpa-onnx/c-api/c-api.h"
 
@@ -59,20 +59,35 @@ static void write_wav(const char *path, const float *samples, int32_t n, int32_t
 
 int main(int argc, char **argv) {
     if (argc < 4) {
-        fprintf(stderr, "usage: %s <model-dir> <text> <out.wav>\n", argv[0]);
+        fprintf(stderr, "usage: %s <model-dir> <text> <out.wav> [length-scale]\n", argv[0]);
         return 1;
     }
     const char *dir = argv[1];
     const char *text = argv[2];
     const char *out = argv[3];
 
-    char model[1024], lexicon[1024], tokens[1024], dict_dir[1024], date_fst[1024], number_fst[1024];
+    char model[1024], lexicon[1024], tokens[1024], dict_dir[1024];
+    char date_fst[1024], number_fst[1024], espeak_dir[1024];
     snprintf(model, sizeof(model), "%s/model.int8.onnx", dir);
     snprintf(lexicon, sizeof(lexicon), "%s/lexicon.txt", dir);
     snprintf(tokens, sizeof(tokens), "%s/tokens.txt", dir);
     snprintf(date_fst, sizeof(date_fst), "%s/date.fst", dir);
     snprintf(number_fst, sizeof(number_fst), "%s/number.fst", dir);
     snprintf(dict_dir, sizeof(dict_dir), "%s", dir);
+
+    // Piper medium 这类模型用 espeak-ng 做音素化，数据放在 espeak-ng-data 子目录里。
+    // 有就指过去；没有就沿用模型目录（x_low 那种带 lexicon.txt 的老模型）。
+    snprintf(espeak_dir, sizeof(espeak_dir), "%s/espeak-ng-data", dir);
+    if (access(espeak_dir, F_OK) == 0) {
+        snprintf(dict_dir, sizeof(dict_dir), "%s", espeak_dir);
+    }
+
+    // 第 4 个可选参数：语速倍率。小于 1 会更快、音调更高，更接近「小宠物」的声音。
+    float length_scale = 1.0f;
+    if (argc >= 5) {
+        float v = (float)atof(argv[4]);
+        if (v > 0.3f && v < 3.0f) length_scale = v;
+    }
 
     SherpaOnnxOfflineTtsConfig config;
     memset(&config, 0, sizeof(config));
@@ -83,7 +98,7 @@ int main(int argc, char **argv) {
     config.model.vits.dict_dir = dict_dir;
     config.model.vits.noise_scale = 0.667f;
     config.model.vits.noise_scale_w = 0.8f;
-    config.model.vits.length_scale = 1.0f;
+    config.model.vits.length_scale = length_scale;
     config.model.num_threads = 2;
     config.model.provider = "cpu";
     config.max_num_sentences = 1;
