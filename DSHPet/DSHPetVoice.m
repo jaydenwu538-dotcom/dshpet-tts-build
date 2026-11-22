@@ -10,11 +10,29 @@ extern char **environ;
 static NSString *const kDSHPetVoiceFlag = @"/var/jb/Library/DSHPet/voice";
 static NSString *const kDSHPetVoiceFlagAlt = @"/Library/DSHPet/voice";
 
-// 本地 TTS 工具（sherpa-onnx 命令行）与 fanchen-C 中文女声模型。
-// 有它们就用自然得多的合成音，没有就退回系统 AVSpeechSynthesizer。
-static NSString *const kDSHPetTTSModelDir = @"/var/jb/Library/DSHPet/models/fanchen";
-// 语速倍率：小于 1 = 更快更尖，贴着「小宠物」的人设。fanchen-C 本身偏慢，给 0.85。
-static NSString *const kDSHPetTTSLengthScale = @"0.85";
+// 本地 TTS 工具（sherpa-onnx 命令行）与中文女声模型。
+// 两个模型档位，按顺序探测：
+//   fanchen   124 MB，rtf ~0.82，音质最好（主力机用）
+//   piper_low  20 MB，rtf ~0.05，够快、占内存小（老机器 / 轻量版用）
+static NSString *DSHPetTTSModelDir(void) {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray<NSString *> *dirs = @[
+        @"/var/jb/Library/DSHPet/models/fanchen",
+        @"/var/jb/Library/DSHPet/models/piper_low",
+        @"/var/jb/Library/DSHPet/models/tts",
+    ];
+    for (NSString *d in dirs) {
+        if ([fm fileExistsAtPath:[d stringByAppendingPathComponent:@"model.int8.onnx"]]) return d;
+    }
+    return nil;
+}
+
+// 语速倍率：小于 1 = 更快更尖，贴着「小宠物」的人设。
+static NSString *DSHPetTTSLengthScale(void) {
+    NSString *dir = DSHPetTTSModelDir();
+    if ([dir containsString:@"piper_low"]) return @"0.82";
+    return @"0.85";
+}
 
 static NSString *DSHPetTTSTool(void) {
     NSArray<NSString *> *cands = @[
@@ -31,8 +49,7 @@ static NSString *DSHPetTTSTool(void) {
 
 static BOOL DSHPetLocalTTSAvailable(void) {
     if (!DSHPetTTSTool()) return NO;
-    NSString *onnx = [kDSHPetTTSModelDir stringByAppendingPathComponent:@"model.int8.onnx"];
-    return [[NSFileManager defaultManager] fileExistsAtPath:onnx];
+    return DSHPetTTSModelDir() != nil;
 }
 
 @interface DSHPetVoiceImpl : NSObject <AVSpeechSynthesizerDelegate>
@@ -88,12 +105,15 @@ static BOOL DSHPetLocalTTSAvailable(void) {
 // 合成在 QOS_CLASS_USER_INITIATED 隊列裡跑，不阻塞主線程（SpringBoard 卡住會被 watchdog 殺）。
 - (void)speakLocal:(NSString *)text {
     NSString *tool = DSHPetTTSTool();
-    NSString *dir = kDSHPetTTSModelDir;
+    NSString *dir = DSHPetTTSModelDir();
+    if (!tool || !dir) { [self speakSystem:text]; return; }
+    NSString *scale = DSHPetTTSLengthScale();
     NSString *wav = [NSTemporaryDirectory() stringByAppendingPathComponent:
                      [NSString stringWithFormat:@"dshpet-tts-%d.wav", (int)getpid()]];
     [[NSFileManager defaultManager] removeItemAtPath:wav error:NULL];
 
-    DSHPetTrace(@"voice: local synth %lu chars", (unsigned long)[text length]);
+    DSHPetTrace(@"voice: local synth %lu chars model=%@ scale=%@",
+                (unsigned long)[text length], dir.lastPathComponent, scale);
     __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         const char *bin = [tool UTF8String];
@@ -102,7 +122,7 @@ static BOOL DSHPetLocalTTSAvailable(void) {
             [dir UTF8String],
             [text UTF8String],
             [wav UTF8String],
-            [kDSHPetTTSLengthScale UTF8String],
+            [scale UTF8String],
             NULL
         };
         posix_spawn_file_actions_t fa;
