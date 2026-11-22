@@ -1,0 +1,8 @@
+Package: com.jayden.dshpet.installer
+Name: DSH 桌寵安裝器
+Version: 1.9.0
+Architecture: iphoneos-arm64
+Description: DSHPet 安裝器 —— 把桌寵插件裝進 SpringBoard
+Maintainer: Jayden Wu
+Author: Jayden Wu
+Section: Applications
